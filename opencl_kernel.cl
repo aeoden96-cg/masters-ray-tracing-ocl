@@ -18,6 +18,14 @@ typedef struct Sphere{
 	float3 emission;
 } Sphere;
 
+typedef struct Plane{
+	float3 color;
+	float3 emission;
+	float3 position;
+	float3 position2;
+	float3 normal;
+} Plane;
+
 static float get_random(unsigned int *seed0, unsigned int *seed1) {
 
 	/* hash the seeds using bitwise AND operations and bitshifts */
@@ -74,7 +82,41 @@ float intersect_sphere(const Sphere* sphere, const Ray* ray) /* version using lo
 	return 0.0f;
 }
 
-bool intersect_scene(__constant Sphere* spheres, const Ray* ray, float* t, int* sphere_id, const int sphere_count)
+float intersect_plane(const Plane* plane, const Ray* ray)
+{
+	float3 normal = plane->normal;
+
+	float3 p0 = (plane->position + plane->position2) / 2.0f;
+	float3 l0 = ray->origin;
+
+	float denom = dot(normal, ray->dir);
+
+	float t = 0.0f;
+
+	if (denom > 1e-6) {
+		float3 p0l0 = p0 - l0;
+		t = dot(p0l0, normal) / denom;
+
+		float3 intersection = l0 + t * ray->dir;
+
+		if (intersection.x >= plane->position.x && intersection.x <= plane->position2.x &&
+			intersection.z >= plane->position.z && intersection.z <= plane->position2.z) {
+			return t;
+		}
+
+  }
+
+	return 0.0f;
+}
+
+bool intersect_scene(
+		__constant Sphere* spheres,
+		__constant Plane* planes,
+ 			const Ray* ray,
+			float* t,
+			int* object_id,
+			const int sphere_count,
+			const int plane_count)
 {
 	/* initialise t to a very large number,
 	so t will be guaranteed to be smaller
@@ -85,15 +127,26 @@ bool intersect_scene(__constant Sphere* spheres, const Ray* ray, float* t, int* 
 
 	/* check if the ray intersects each sphere in the scene */
 	for (int i = 0; i < sphere_count; i++)  {
-		
+
 		Sphere sphere = spheres[i]; /* create local copy of sphere */
-		
+
 		/* float hitdistance = intersect_sphere(&spheres[i], ray); */
 		float hitdistance = intersect_sphere(&sphere, ray);
 		/* keep track of the closest intersection and hitobject found so far */
 		if (hitdistance != 0.0f && hitdistance < *t) {
 			*t = hitdistance;
-			*sphere_id = i;
+			*object_id = i;
+		}
+	}
+	for (int i = 0; i < plane_count; i++)  {
+
+		Plane plane = planes[i];
+
+		float hitdistanceplane = intersect_plane(&plane, ray);
+
+		if (hitdistanceplane > 0.0f && hitdistanceplane < *t) {
+			*t = hitdistanceplane;
+			*object_id = i + sphere_count;
 		}
 	}
 	return *t < inf; /* true when ray interesects the scene */
@@ -109,8 +162,10 @@ bool intersect_scene(__constant Sphere* spheres, const Ray* ray, float* t, int* 
 
 float3 trace(
 	__constant Sphere* spheres,
+	__constant Plane* planes,
 	const Ray* camray,
 	const int sphere_count,
+	const int plane_count,
 	const int* seed0,
 	const int* seed1,
 	const int max_bounces)
@@ -124,24 +179,37 @@ float3 trace(
 	for (int bounces = 0; bounces < max_bounces; bounces++){
 
 		float t;   /* distance to intersection */
-		int hitsphere_id = 0; /* index of intersected sphere */
+		int hitobject_id = 0; /* index of intersected sphere */
 
 		/* if ray misses scene, return background colour */
-		if (!intersect_scene(spheres, &ray, &t, &hitsphere_id, sphere_count))
+		if (!intersect_scene(spheres,planes, &ray, &t, &hitobject_id, sphere_count,plane_count))
 			return accum_color += mask * (float3)(0.15f, 0.15f, 0.25f);
 
 
+		float3 hitpoint = ray.origin + ray.dir * t;
+
+		Sphere hitsphere;
+		Plane hitplane;
+		float3 normal;
+
+		if(hitobject_id < sphere_count){
+			hitsphere = spheres[hitobject_id];
+			normal = normalize(hitpoint - hitsphere.pos);
+		}
+		else{
+			hitplane = planes[hitobject_id - sphere_count];
+			normal = hitplane.normal;
+		}
 		/* t now contains the distance to the closest intersection */
 		/* hitsphere_id now contains the index of the closest intersected sphere */
 
 		/* else, we've got a hit! Fetch the closest hit sphere */
-		Sphere hitsphere = spheres[hitsphere_id]; /* version with local copy of sphere */
+		
 
 		/* compute the hitpoint using the ray equation */
-		float3 hitpoint = ray.origin + ray.dir * t;
 
 		/* compute the surface normal and flip it if necessary to face the incoming ray */
-		float3 normal = normalize(hitpoint - hitsphere.pos);
+		
 		float3 normal_facing = dot(normal, ray.dir) < 0.0f ? normal : normal * (-1.0f);
 
 		/* compute two random numbers to pick a random point on the hemisphere above the hitpoint*/
@@ -173,10 +241,15 @@ float3 trace(
 		ray.dir = newdir;
 
 		/* add the colour and light contributions to the accumulated colour */
-		accum_color += mask * hitsphere.emission;
+		if(hitobject_id < sphere_count){
+			accum_color += mask * hitsphere.emission;
+			mask *= hitsphere.color;
+		}
+		else{
+			accum_color += mask * hitplane.emission;
+			mask *= hitplane.color;
+		}
 
-		/* the mask colour picks up surface colours at each bounce */
-		mask *= hitsphere.color;
 
 		/* perform cosine-weighted importance sampling for diffuse surfaces*/
 		mask *= dot(newdir, normal_facing);
@@ -187,9 +260,11 @@ float3 trace(
 
 __kernel void render_kernel(
 	__constant Sphere* spheres,
+	__constant Plane* planes,
 	const int width,
 	const int height,
 	const int sphere_count,
+	const int plane_count,
 	const int samples,
 	const int bounces,
 	__global float3* output
@@ -210,7 +285,15 @@ __kernel void render_kernel(
 	float invSamples = 1.0f / samples;
 
 	for (int i = 0; i < samples; i++)
-		finalcolor += trace(spheres, &camray, sphere_count, &seed0, &seed1, bounces) * invSamples;
+		finalcolor += trace(
+			spheres,
+			planes,
+			&camray,
+			sphere_count,
+			plane_count,
+			&seed0, &seed1,
+			bounces
+			) * invSamples;
 
 	/* store the pixelcolour in the output buffer */
 	output[work_item_id] = finalcolor;

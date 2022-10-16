@@ -25,6 +25,7 @@ Context context;
 Program program;
 Buffer cl_output;
 Buffer cl_spheres;
+Buffer cl_planes;
 
 // dummy variables are required for memory alignment
 // float3 is considered as float4 by OpenCL
@@ -177,6 +178,14 @@ void saveImage(){
 
 #define float3(x, y, z) {{x, y, z}}  // macro to replace ugly initializer braces
 
+void initScenePlanes(Plane* planes){
+	planes[0].position = float3(-0.35f, -0.0f, -0.3f);
+	planes[0].position2 = float3(0.30f, -0.0f, 0.3f);
+	planes[0].color = float3(0.25f, 0.25f, 0.75f);
+	planes[0].emission = float3(0, 0, 0);
+	planes[0].normal = float3(0, 1, 0);
+}
+
 void initScene(Sphere* cpu_spheres){
 
 	// left wall
@@ -267,20 +276,33 @@ int main(int argc, char** argv){
 	Sphere cpu_spheres[sphere_count];
 	initScene(cpu_spheres);
 
+	const int plane_count = 1;
+
+	Plane cpu_planes[plane_count];
+	initScenePlanes(cpu_planes);
+
+	std::cout << "Num of planes: " << plane_count << std::endl;
+	std::cout << "Size of plane: " << sizeof(Plane) << std::endl;
+	std::cout << "Size of cl_float3: " << sizeof(cl_float3) << std::endl;
+
 	// Create buffers on the OpenCL device for the image and the scene
 	cl_output = Buffer(context, CL_MEM_WRITE_ONLY, image_width * image_height * sizeof(cl_float3));
 	cl_spheres = Buffer(context, CL_MEM_READ_ONLY, sphere_count * sizeof(Sphere));
 	queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0, sphere_count * sizeof(Sphere), cpu_spheres);
+	cl_planes = Buffer(context, CL_MEM_READ_ONLY, plane_count * sizeof(Plane));
+	queue.enqueueWriteBuffer(cl_planes, CL_TRUE, 0, plane_count * sizeof(Plane), cpu_planes);
 
 
 	// specify OpenCL kernel arguments
 	kernel.setArg(0, cl_spheres);
-	kernel.setArg(1, image_width);
-	kernel.setArg(2, image_height);
-	kernel.setArg(3, sphere_count);
-	kernel.setArg(4, samples);
-	kernel.setArg(5, bounces);
-	kernel.setArg(6, cl_output);
+	kernel.setArg(1, cl_planes);
+	kernel.setArg(2, image_width);
+	kernel.setArg(3, image_height);
+	kernel.setArg(4, sphere_count);
+	kernel.setArg(5, plane_count);
+	kernel.setArg(6, samples);
+	kernel.setArg(7, bounces);
+	kernel.setArg(8, cl_output);
 
 
 	// every pixel in the image has its own thread or "work item",
