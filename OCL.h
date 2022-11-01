@@ -30,8 +30,9 @@ public:
     }
     std::vector<cl_float3> cpu_output;
 
-    void initScenePlanes(int plane_count){
-        cpu_planes.resize(plane_count);
+    void initScenePlanes(int pc){
+        this->plane_count = pc;
+        cpu_planes.resize(pc);
 
         cpu_planes[0].position = {-0.35f, -0.0f, -0.3f};
         cpu_planes[0].position2 = {0.30f, -0.0f, 0.3f};
@@ -40,8 +41,9 @@ public:
         cpu_planes[0].normal =  {0, 1, 0};
     }
 
-    void initScene(int sphere_count){
-        cpu_spheres.resize(sphere_count);
+    void initScene(int sc){
+        this->sphere_count = sc;
+        cpu_spheres.resize(sc);
 
         // left wall
         cpu_spheres[0].radius	= 200.0f;
@@ -102,13 +104,13 @@ public:
 
     void setGPUArgs(){
         // Create buffers on the OpenCL device for the image and the scene
-        cl_output =     Buffer(context, CL_MEM_WRITE_ONLY, w * h                * sizeof(cl_float3));
-        cl_spheres =    Buffer(context, CL_MEM_READ_ONLY, cpu_spheres.size()    * sizeof(Sphere));
-        cl_planes =     Buffer(context, CL_MEM_READ_ONLY, cpu_planes.size()     * sizeof(Plane));
+        cl_output =     Buffer(context, CL_MEM_WRITE_ONLY, w * h            * sizeof(cl_float3));
+        cl_spheres =    Buffer(context, CL_MEM_READ_ONLY, sphere_count   * sizeof(Sphere));
+        cl_planes =     Buffer(context, CL_MEM_READ_ONLY, plane_count    * sizeof(Plane));
 
 
-        queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0,  cpu_spheres.size() * sizeof(Sphere), &cpu_spheres[0]);
-        queue.enqueueWriteBuffer(cl_planes,  CL_TRUE, 0,  cpu_planes.size()  * sizeof(Plane),  &cpu_planes[0]);
+        queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0,  sphere_count * sizeof(Sphere), &cpu_spheres[0]);
+        queue.enqueueWriteBuffer(cl_planes,  CL_TRUE, 0,  plane_count * sizeof(Plane),  &cpu_planes[0]);
 
 
         // specify OpenCL kernel arguments
@@ -116,8 +118,8 @@ public:
         kernel.setArg(1, cl_planes);
         kernel.setArg(2, w);
         kernel.setArg(3, h);
-        kernel.setArg(4, cpu_spheres.size());
-        kernel.setArg(5, cpu_planes.size());
+        kernel.setArg(4, sphere_count);
+        kernel.setArg(5, plane_count);
         kernel.setArg(6, samples);
         kernel.setArg(7, bounces);
         kernel.setArg(8, cl_output);
@@ -173,6 +175,9 @@ public:
 
 
 private:
+    int plane_count = 0;
+    int sphere_count = 0;
+
     Buffer cl_output;
     Buffer cl_spheres;
     Buffer cl_planes;
@@ -198,10 +203,10 @@ private:
     const int w;
     const int h;
 
-    //inline float clamp(float x){ return x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x; }
+    inline float clamp(float x){ return x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x; }
 
     // convert RGB float in range [0,1] to int in range [0, 255] and perform gamma correction
-    inline int toInt(float x){ return int(std::clamp((x) * 255 + .5f, 0.0f, 1.0f)); }
+    inline int toInt(float x){ return int( clamp(x)); }
 
 
     void initOpenCL(bool info)
