@@ -7,19 +7,29 @@
 
 
 #include <chrono>
+#include <thread>
 #include "OCL.h"
 
 
 
 
 
-Settings settings = { 720, 480, 5, 100 };
+Settings settings = { 720, 480, 5, 10 };
+
+OCL ocl(settings);
+
+
+void loop(){
+    ocl.load2Gpu();
+    ocl.render();
+}
+
 
 
 int main(int argc, char** argv){
 	bool info = false;
 
-    OCL ocl(settings);
+
 	// console arguments
 	std::vector<std::string> args;
 	std::copy(argv + 1, argv + argc, std::back_inserter(args));
@@ -34,16 +44,48 @@ int main(int argc, char** argv){
 
 	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
-	// initialise OpenCL
-	ocl.initOpenCL(info);
+    // initialise OpenCL
+    ocl.initOpenCL(info);
     ocl.initSceneSpheres();
-	ocl.initScenePlanes();
-	ocl.load2Gpu();
-	ocl.render();
+    ocl.initScenePlanes();
 
-	// save image
-    ocl.saveImage();
-	cout << "Saved image to 'opencl_raytracer.ppm'" << endl;
+    sf::Thread thread(&loop);
+    sf::RenderWindow window(sf::VideoMode(settings.image_width, settings.image_height), "Path Tracer");
+    sf::Texture texture;
+    texture.create(settings.image_width, settings.image_height);
+    sf::Sprite sprite(texture);
+
+
+    while (window.isOpen())
+    {
+        sf::Event event;
+        while (window.pollEvent(event))
+        {
+            //check keyboard input
+            if (event.type == sf::Event::KeyPressed){
+                if (event.key.code == sf::Keyboard::Left){
+                    ocl.animate();
+                }
+            }
+            if (event.type == sf::Event::Closed)
+                window.close();
+        }
+
+        thread.launch();
+        thread.wait();
+
+        auto pixels = ocl.saveToArray();
+        texture.update(pixels);
+
+        delete[] pixels;
+
+        window.clear();
+        window.draw(sprite);
+        window.display();
+    }
+
+    return 0;
+
 
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 

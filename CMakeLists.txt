@@ -10,6 +10,7 @@ add_executable(project
 
 target_link_libraries(project
     -lGLEW -lGL -lGLU -lglut -lpthread -lm -lOpenCL
+        sfml-graphics sfml-window sfml-system
 )
 
 find_package(OpenCL REQUIRED)

@@ -12,7 +12,7 @@
 #include "Sphere.hpp"
 
 using namespace cl;
-
+#include <SFML/Graphics.hpp>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -62,6 +62,11 @@ public:
         kernel.setArg(6, samples);
         kernel.setArg(7, bounces);
         kernel.setArg(8, cl_output);
+    }
+
+    void animate(){
+        cpu_spheres[7].position.x += 0.01f;
+
     }
 
     void initOpenCL(bool info)
@@ -161,6 +166,23 @@ public:
                     toInt(pixel.s[1]),
                     toInt(pixel.s[2]));
         }
+    }
+
+    sf::Uint8*  saveToArray(){
+        auto* pixels = new sf::Uint8[image_width * image_height * 4];
+        int i = 0;
+        for (auto& pixel : cpu_output) {
+            pixels[i] = toInt(pixel.s[0]);
+            pixels[i+1] = toInt(pixel.s[1]);
+            pixels[i+2] = toInt(pixel.s[2]);
+            pixels[i+3] = 255;
+            i+=4;
+        }
+        return pixels;
+
+
+
+
     }
 
     void initScenePlanes(){
