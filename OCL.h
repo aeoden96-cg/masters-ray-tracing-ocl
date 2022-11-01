@@ -28,7 +28,7 @@ public:
         initOpenCL(info);
 
     }
-    std::vector<cl_float3> cpu_output;
+    std::vector<cl_float4> cpu_output;
 
     void initScenePlanes(int pc){
         this->plane_count = pc;
