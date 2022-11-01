@@ -14,10 +14,13 @@
 using namespace std;
 using namespace cl;
 
-const int image_width = 1280;
-const int image_height = 720;
+const int image_width = 720;
+const int image_height = 480;
 
-cl_float4* cpu_output;
+int samples = 100;	// number of samples per pixel
+int bounces = 8;	// number of bounces per ray
+
+std::vector<cl_float4> cpu_output;
 CommandQueue queue;
 Device device;
 Kernel kernel;
@@ -153,9 +156,7 @@ void initOpenCL(bool info)
 	kernel = Kernel(program, "render_kernel");
 }
 
-void cleanUp(){
-	delete cpu_output;
-}
+
 
 inline float clamp(float x){ return x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x; }
 
@@ -169,16 +170,17 @@ void saveImage(){
 	fprintf(f, "P3\n%d %d\n%d\n", image_width, image_height, 255);
 
 	// loop over all pixels, write RGB values
-	for (int i = 0; i < image_width * image_height; i++)
-		fprintf(f, "%d %d %d ",
-		toInt(cpu_output[i].s[0]),
-		toInt(cpu_output[i].s[1]),
-		toInt(cpu_output[i].s[2]));
+	for (auto& pixel : cpu_output) {
+        fprintf(f, "%d %d %d ",
+                toInt(pixel.s[0]),
+                toInt(pixel.s[1]),
+                toInt(pixel.s[2]));
+    }
 }
 
 #define float3(x, y, z) {{x, y, z}}  // macro to replace ugly initializer braces
 
-void initScenePlanes(Plane* planes){
+void initScenePlanes(std::vector<Plane>& planes){
 	planes[0].position = float3(-0.35f, -0.0f, -0.3f);
 	planes[0].position2 = float3(0.30f, -0.0f, 0.3f);
 	planes[0].color = float3(0.25f, 0.25f, 0.75f);
@@ -186,9 +188,9 @@ void initScenePlanes(Plane* planes){
 	planes[0].normal = float3(0, 1, 0);
 }
 
-void initScene(Sphere* cpu_spheres){
+void initScene(std::vector<Sphere>& cpu_spheres){
 
-	// left wall
+               // left wall
 	cpu_spheres[0].radius	= 200.0f;
 	cpu_spheres[0].position = float3(-200.6f, 0.0f, 0.0f);
 	cpu_spheres[0].color    = float3(0.75f, 0.25f, 0.25f);
@@ -247,8 +249,7 @@ void initScene(Sphere* cpu_spheres){
 int main(int argc, char** argv){
 	bool info = false;
 
-	int samples = 1024;	// number of samples per pixel
-	int bounces = 8;	// number of bounces per ray
+
 
 	// console arguments
 	std::vector<std::string> args;
@@ -268,29 +269,24 @@ int main(int argc, char** argv){
 	initOpenCL(info);
 
 	// allocate memory on CPU to hold the rendered image
-	cpu_output = new cl_float3[image_width * image_height];
+	cpu_output.resize(image_width * image_height);
 
 	// initialise scene
-	const int sphere_count = 9;
-	
-	Sphere cpu_spheres[sphere_count];
+
+    int numSpheres = 9;
+	std::vector<Sphere> cpu_spheres(numSpheres);
 	initScene(cpu_spheres);
 
-	const int plane_count = 1;
-
-	Plane cpu_planes[plane_count];
+    int numPlanes = 1;
+    std::vector<Plane> cpu_planes(numPlanes);
 	initScenePlanes(cpu_planes);
-
-	std::cout << "Num of planes: " << plane_count << std::endl;
-	std::cout << "Size of plane: " << sizeof(Plane) << std::endl;
-	std::cout << "Size of cl_float3: " << sizeof(cl_float3) << std::endl;
 
 	// Create buffers on the OpenCL device for the image and the scene
 	cl_output = Buffer(context, CL_MEM_WRITE_ONLY, image_width * image_height * sizeof(cl_float3));
-	cl_spheres = Buffer(context, CL_MEM_READ_ONLY, sphere_count * sizeof(Sphere));
-	queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0, sphere_count * sizeof(Sphere), cpu_spheres);
-	cl_planes = Buffer(context, CL_MEM_READ_ONLY, plane_count * sizeof(Plane));
-	queue.enqueueWriteBuffer(cl_planes, CL_TRUE, 0, plane_count * sizeof(Plane), cpu_planes);
+	cl_spheres = Buffer(context, CL_MEM_READ_ONLY, numSpheres * sizeof(Sphere));
+	queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0, numSpheres  * sizeof(Sphere), cpu_spheres.data());
+	cl_planes = Buffer(context, CL_MEM_READ_ONLY, numPlanes * sizeof(Plane));
+	queue.enqueueWriteBuffer(cl_planes, CL_TRUE, 0, numPlanes * sizeof(Plane), cpu_planes.data());
 
 
 	// specify OpenCL kernel arguments
@@ -298,8 +294,8 @@ int main(int argc, char** argv){
 	kernel.setArg(1, cl_planes);
 	kernel.setArg(2, image_width);
 	kernel.setArg(3, image_height);
-	kernel.setArg(4, sphere_count);
-	kernel.setArg(5, plane_count);
+	kernel.setArg(4, numSpheres);
+	kernel.setArg(5, numPlanes);
 	kernel.setArg(6, samples);
 	kernel.setArg(7, bounces);
 	kernel.setArg(8, cl_output);
@@ -331,14 +327,11 @@ int main(int argc, char** argv){
 	cout << "Rendering done! \nCopying output from GPU device to host" << endl;
 
 	// read and copy OpenCL output to CPU
-	queue.enqueueReadBuffer(cl_output, CL_TRUE, 0, image_width * image_height * sizeof(cl_float3), cpu_output);
+	queue.enqueueReadBuffer(cl_output, CL_TRUE, 0, image_width * image_height * sizeof(cl_float3), cpu_output.data());
 
 	// save image
 	saveImage();
 	cout << "Saved image to 'opencl_raytracer.ppm'" << endl;
-
-	// release memory
-	cleanUp();
 
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
