@@ -14,43 +14,39 @@
 using namespace std;
 using namespace cl;
 
+struct Settings{
+    int image_width;
+    int image_height;
+    int max_depth;
+    int samples;
+};
+
+struct Objects{
+    std::vector<Sphere> spheres;
+    std::vector<Plane> planes;
+};
+
+Settings settings = { 720, 480, 5, 100 };
 
 
-
-// dummy variables are required for memory alignment
-// float3 is considered as float4 by OpenCL
 
 
 class OCL {
 public:
-    OCL() {
+    OCL(Settings s):
+        image_width(s.image_width),
+        image_height(s.image_height),
+        bounces(s.max_depth),
+        samples(s.samples)
+    {
         cpu_planes.resize(numPlanes);
         cpu_spheres.resize(numSpheres);
 
+        // allocate memory on CPU to hold the rendered image
+        cpu_output.resize(image_width * image_height);
+
     }
-    std::vector<Plane> cpu_planes;
-    std::vector<Sphere> cpu_spheres;
-    std::vector<cl_float4> cpu_output;
-    CommandQueue queue;
-    Device device;
-    Kernel kernel;
-    Context context;
-    Program program;
-    Buffer cl_output;
-    Buffer cl_spheres;
-    Buffer cl_planes;
 
-    const int image_width = 720;
-    const int image_height = 480;
-
-    std::size_t global_work_size;
-    std::size_t local_work_size;
-
-    int samples = 100;	// number of samples per pixel
-    int bounces = 8;	// number of bounces per ray
-
-    int numSpheres = 9;
-    int numPlanes = 1;
 
     void load2Gpu() {
 // Create buffers on the OpenCL device for the image and the scene
@@ -73,58 +69,6 @@ public:
         kernel.setArg(8, cl_output);
     }
 
-
-    void pickPlatform(Platform& platform, const cl::vector<Platform>& platforms){
-
-        if (platforms.size() == 1) platform = platforms[0];
-        else{
-            int input = 0;
-            cout << "\nChoose an OpenCL platform: ";
-            cin >> input;
-
-            // handle incorrect user input
-            while (input < 1 || input > platforms.size()){
-                cin.clear(); //clear errors/bad flags on cin
-                cin.ignore(cin.rdbuf()->in_avail(), '\n'); // ignores exact number of chars in cin buffer
-                cout << "No such option. Choose an OpenCL platform: ";
-                cin >> input;
-            }
-            platform = platforms[input - 1];
-        }
-    }
-
-    void pickDevice(const cl::vector<Device>& devices){
-
-        if (devices.size() == 1) device = devices[0];
-        else{
-            int input = 0;
-            cout << "\nChoose an OpenCL device: ";
-            cin >> input;
-
-            // handle incorrect user input
-            while (input < 1 || input > devices.size()){
-                cin.clear(); //clear errors/bad flags on cin
-                cin.ignore(cin.rdbuf()->in_avail(), '\n'); // ignores exact number of chars in cin buffer
-                cout << "No such option. Choose an OpenCL device: ";
-                cin >> input;
-            }
-            device = devices[input - 1];
-        }
-    }
-
-    void printErrorLog(){
-
-        // Get the error log and print to console
-        string buildlog = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
-        cerr << "Build log:" << std::endl << buildlog << std::endl;
-
-        // Print the error log to a file
-        FILE *log = fopen("errorlog.txt", "w");
-        fprintf(log, "%s\n", buildlog.c_str());
-        cout << "Error log saved in 'errorlog.txt'" << endl;
-        exit(1);
-    }
-
     void initOpenCL(bool info)
     {
         // Get all available OpenCL platforms (e.g. AMD OpenCL, Nvidia CUDA, Intel OpenCL)
@@ -138,8 +82,8 @@ public:
         }
 
         // Pick one platform
-        Platform platform;
-        pickPlatform(platform, platforms);
+
+        pickPlatform(platforms);
 
         if(info) cout << "\nUsing OpenCL platform: \t" << platform.getInfo<CL_PLATFORM_NAME>() << endl;
 
@@ -208,9 +152,6 @@ public:
         if (global_work_size % local_work_size != 0)
             global_work_size = (global_work_size / local_work_size + 1) * local_work_size;
     }
-
-// convert RGB float in range [0,1] to int in range [0, 255] and perform gamma correction
-    inline int toInt(float x){ return int(std::clamp(x, 0.0f, 1.0f) * 255 + .5f); }
 
     void saveImage(){
         // write image to PPM file, a very simple image file format
@@ -293,22 +234,118 @@ public:
 
     }
 
+    void render(){
+        cout << "Rendering started..." << endl;
 
+        // launch the kernel
+        queue.enqueueNDRangeKernel(
+                kernel,
+                0,
+                global_work_size,
+                local_work_size);
+
+        queue.finish();
+
+        cout << "Rendering done! \nCopying output from GPU device to host" << endl;
+
+        // read and copy OpenCL output to CPU
+        queue.enqueueReadBuffer(
+                cl_output,
+                CL_TRUE,
+                0,
+                image_width * image_height * sizeof(cl_float3),
+                cpu_output.data());
+    }
+
+
+private:
+
+    void pickPlatform(const cl::vector<Platform>& platforms){
+
+        if (platforms.size() == 1) platform = platforms[0];
+        else{
+            int input = 0;
+            cout << "\nChoose an OpenCL platform: ";
+            cin >> input;
+
+            // handle incorrect user input
+            while (input < 1 || input > platforms.size()){
+                cin.clear(); //clear errors/bad flags on cin
+                cin.ignore(cin.rdbuf()->in_avail(), '\n'); // ignores exact number of chars in cin buffer
+                cout << "No such option. Choose an OpenCL platform: ";
+                cin >> input;
+            }
+            platform = platforms[input - 1];
+        }
+    }
+
+    void pickDevice(const cl::vector<Device>& devices){
+
+        if (devices.size() == 1) device = devices[0];
+        else{
+            int input = 0;
+            cout << "\nChoose an OpenCL device: ";
+            cin >> input;
+
+            // handle incorrect user input
+            while (input < 1 || input > devices.size()){
+                cin.clear(); //clear errors/bad flags on cin
+                cin.ignore(cin.rdbuf()->in_avail(), '\n'); // ignores exact number of chars in cin buffer
+                cout << "No such option. Choose an OpenCL device: ";
+                cin >> input;
+            }
+            device = devices[input - 1];
+        }
+    }
+
+    void printErrorLog(){
+
+        // Get the error log and print to console
+        string buildlog = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+        cerr << "Build log:" << std::endl << buildlog << std::endl;
+
+        // Print the error log to a file
+        FILE *log = fopen("errorlog.txt", "w");
+        fprintf(log, "%s\n", buildlog.c_str());
+        cout << "Error log saved in 'errorlog.txt'" << endl;
+        exit(1);
+    }
+
+    // convert RGB float in range [0,1] to int in range [0, 255] and perform gamma correction
+    inline int toInt(float x){ return int(std::clamp(x, 0.0f, 1.0f) * 255 + .5f); }
+
+
+    std::vector<Plane> cpu_planes;
+    std::vector<Sphere> cpu_spheres;
+    std::vector<cl_float4> cpu_output;
+    CommandQueue queue;
+    Device device;
+    Kernel kernel;
+    Platform platform;
+    Context context;
+    Program program;
+    Buffer cl_output;
+    Buffer cl_spheres;
+    Buffer cl_planes;
+
+    const int image_width;
+    const int image_height;
+    const int samples;	// number of samples per pixel
+    const int bounces;	// number of bounces per ray
+
+    std::size_t global_work_size;
+    std::size_t local_work_size;
+
+    int numSpheres = 9;
+    int numPlanes = 1;
 
 };
-
-OCL ocl;
-
-
-
-
-
-
 
 
 int main(int argc, char** argv){
 	bool info = false;
 
+    OCL ocl(settings);
 	// console arguments
 	std::vector<std::string> args;
 	std::copy(argv + 1, argv + argc, std::back_inserter(args));
@@ -325,37 +362,10 @@ int main(int argc, char** argv){
 
 	// initialise OpenCL
 	ocl.initOpenCL(info);
-
-	// allocate memory on CPU to hold the rendered image
-	ocl.cpu_output.resize(ocl.image_width * ocl.image_height);
-
-	// initialise scene
-
-
     ocl.initSceneSpheres();
-
 	ocl.initScenePlanes();
-
 	ocl.load2Gpu();
-
-
-
-
-	cout << "Rendering started..." << endl;
-
-	// launch the kernel
-	ocl.queue.enqueueNDRangeKernel(
-		ocl.kernel,
-		0,
-		ocl.global_work_size,
-		ocl.local_work_size);
-
-	ocl.queue.finish();
-
-	cout << "Rendering done! \nCopying output from GPU device to host" << endl;
-
-	// read and copy OpenCL output to CPU
-	ocl.queue.enqueueReadBuffer(ocl.cl_output, CL_TRUE, 0, ocl.image_width * ocl.image_height * sizeof(cl_float3), ocl.cpu_output.data());
+	ocl.render();
 
 	// save image
     ocl.saveImage();
