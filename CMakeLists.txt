@@ -6,7 +6,7 @@ add_executable(project
             main.cpp
             Sphere.cpp
             Sphere.hpp
-)
+        OCL.cpp OCL.h)
 
 target_link_libraries(project
     -lGLEW -lGL -lGLU -lglut -lpthread -lm -lOpenCL
