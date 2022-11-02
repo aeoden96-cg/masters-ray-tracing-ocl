@@ -44,7 +44,7 @@ public:
 
 
     void load2Gpu() {
-// Create buffers on the OpenCL device for the image and the scene
+        // Create buffers on the OpenCL device for the image and the scene
         cl_output = Buffer(context, CL_MEM_WRITE_ONLY, image_width * image_height * sizeof(cl_float3));
         cl_spheres = Buffer(context, CL_MEM_READ_ONLY, numSpheres * sizeof(Sphere));
         queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0, numSpheres  * sizeof(Sphere), cpu_spheres.data());
@@ -64,8 +64,31 @@ public:
         kernel.setArg(8, cl_output);
     }
 
-    void animate(){
-        cpu_spheres[7].position.x += 0.01f;
+    void animate(sf::Keyboard::Key key){
+        switch(key){
+            case sf::Keyboard::G:
+                cpu_planes[0].position.y += 0.1;
+                cpu_planes[0].position2.y += 0.1;
+                break;
+            case sf::Keyboard::B:
+                cpu_planes[0].position.y -= 0.1;
+                cpu_planes[0].position2.y -= 0.1;
+                break;
+            case sf::Keyboard::V:
+                cpu_planes[0].position.x -= 0.1;
+                cpu_planes[0].position2.x -= 0.1;
+                break;
+            case sf::Keyboard::N:
+                cpu_planes[0].position.x += 0.1;
+                cpu_planes[0].position2.x += 0.1;
+                break;
+            case sf::Keyboard::H:
+                //flip normal
+                cpu_planes[0].normal.x *= -1;
+            default:
+                std::cout << "Invalid key" << std::endl;
+
+        }
 
     }
 

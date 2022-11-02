@@ -100,7 +100,8 @@ float intersect_plane(const Plane* plane, const Ray* ray)
 		float3 intersection = l0 + t * ray->dir;
 
 		if (intersection.x >= plane->position.x && intersection.x <= plane->position2.x &&
-			intersection.z >= plane->position.z && intersection.z <= plane->position2.z) {
+			intersection.z >= plane->position.z && intersection.z <= plane->position2.z &&
+			intersection.y >= plane->position.y - EPSILON && intersection.y <= plane->position2.y + EPSILON) {
 			return t;
 		}
 

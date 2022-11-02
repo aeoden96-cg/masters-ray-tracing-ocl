@@ -56,7 +56,7 @@ int main(int argc, char** argv){
     sf::Sprite sprite(texture);
 
 
-    sf::Text text;
+    std::map<std::string, sf::Text> texts;
 
     sf::Font font;
     if (!font.loadFromFile("arial.ttf"))
@@ -64,51 +64,21 @@ int main(int argc, char** argv){
         // error...
     }
 
-// select the font
-    text.setFont(font); // font is a sf::Font
-// set the string to display
-    text.setString("Path tracer");
-// set the character size
-    text.setCharacterSize(18); // in pixels, not points!
-// set the color
-    text.setFillColor(sf::Color::Black);
-// set the text style
-    text.setStyle(sf::Text::Bold);
+    texts["name"]    = sf::Text("Path tracer",                                        font, 18);
+    texts["name"].setPosition(10, 10);
+    texts["samples"] = sf::Text("Samples: " + std::to_string(settings.samples),   font, 18);
+    texts["samples"].setPosition(10, 30);
+    texts["bounces"] = sf::Text("Bounces: " + std::to_string(settings.max_depth), font, 18);
+    texts["bounces"].setPosition(10, 50);
+    texts["fps"]     = sf::Text("FPS: " + std::to_string(0),                      font, 18);
+    texts["fps"].setPosition(10, 70);
+    texts["time"]    = sf::Text("Time: " + std::to_string(0),                     font, 18);
+    texts["time"].setPosition(10, 90);
 
-    text.setPosition(20, 20);
-
-
-    sf::Text samples_text;
-    samples_text.setString("Samples: " + std::to_string(settings.samples));
-    samples_text.setFont(font);
-    samples_text.setCharacterSize(18);
-    samples_text.setFillColor(sf::Color::Black);
-    samples_text.setStyle(sf::Text::Bold);
-    samples_text.setPosition(20, 40);
-
-    sf::Text bounces_text;
-    bounces_text.setString("Bounces: " + std::to_string(settings.max_depth));
-    bounces_text.setFont(font);
-    bounces_text.setCharacterSize(18);
-    bounces_text.setFillColor(sf::Color::Black);
-    bounces_text.setStyle(sf::Text::Bold);
-    bounces_text.setPosition(20, 60);
-
-    sf::Text fps_text;
-    fps_text.setString("FPS: ");
-    fps_text.setFont(font);
-    fps_text.setCharacterSize(18);
-    fps_text.setFillColor(sf::Color::Black);
-    fps_text.setStyle(sf::Text::Bold);
-    fps_text.setPosition(20, 80);
-
-    sf::Text time_text;
-    time_text.setString("Time: ");
-    time_text.setFont(font);
-    time_text.setCharacterSize(18);
-    time_text.setFillColor(sf::Color::Black);
-    time_text.setStyle(sf::Text::Bold);
-    time_text.setPosition(20, 100);
+    for (auto& [key, value] : texts) {
+        value.setFillColor(sf::Color::Black);
+        value.setStyle(sf::Text::Bold);
+    }
 
 
     sf::RectangleShape rect;
@@ -129,22 +99,26 @@ int main(int argc, char** argv){
                     settings.samples -= 1;
                     if (settings.samples < 1) settings.samples = 1;
                     ocl.setSamples(settings.samples);
-                    samples_text.setString("Samples: " + std::to_string(settings.samples));
+                    texts["samples"].setString("Samples: " + std::to_string(settings.samples));
                 }else if (event.key.code == sf::Keyboard::Right){
                     settings.samples += 1;
                     ocl.setSamples(settings.samples);
-                    samples_text.setString("Samples: " + std::to_string(settings.samples));
+                    texts["samples"].setString("Samples: " + std::to_string(settings.samples));
                 }else if (event.key.code == sf::Keyboard::Up){
                     settings.max_depth += 1;
                     ocl.setBounces(settings.max_depth);
-                    bounces_text.setString("Bounces: " + std::to_string(settings.max_depth));
+                    texts["bounces"].setString("Bounces: " + std::to_string(settings.max_depth));
                 }else if (event.key.code == sf::Keyboard::Down){
                     settings.max_depth -= 1;
                     if (settings.max_depth < 1) settings.max_depth= 1;
                     ocl.setBounces(settings.max_depth);
-                    bounces_text.setString("Bounces: " + std::to_string(settings.max_depth));
-
+                    texts["bounces"].setString("Bounces: " + std::to_string(settings.max_depth));
                 }
+                else if( event.key.code >= sf::Keyboard::A && event.key.code <= sf::Keyboard::Z ){
+                    ocl.animate(event.key.code);
+                }
+
+
             }
             if (event.type == sf::Event::Closed)
                 window.close();
@@ -158,22 +132,19 @@ int main(int argc, char** argv){
         //cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << endl;
         auto fps = 1000.0f / std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
-        fps_text.setString("FPS: " + std::to_string(fps).substr(0, 5));
-        time_text.setString("Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()).substr(0, 5) + "ms");
+        texts["fps"].setString("FPS: " + std::to_string(fps).substr(0, 5));
+        texts["time"].setString("Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()).substr(0, 5) + "ms");
 
         auto pixels = ocl.saveToArray();
         texture.update(pixels);
-
         delete[] pixels;
 
         window.clear();
         window.draw(sprite);
         window.draw(rect);
-        window.draw(text);
-        window.draw(samples_text);
-        window.draw(bounces_text);
-        window.draw(fps_text);
-        window.draw(time_text);
+        for (const auto& text : texts){
+            window.draw(text.second);
+        }
         window.display();
     }
 
