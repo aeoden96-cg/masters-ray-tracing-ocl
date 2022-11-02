@@ -252,7 +252,7 @@ public:
     }
 
     void render(){
-        cout << "Rendering started..." << endl;
+        //cout << "Rendering started..." << endl;
 
         // launch the kernel
         queue.enqueueNDRangeKernel(
@@ -263,7 +263,7 @@ public:
 
         queue.finish();
 
-        cout << "Rendering done! \nCopying output from GPU device to host" << endl;
+        //cout << "Rendering done! \nCopying output from GPU device to host" << endl;
 
         // read and copy OpenCL output to CPU
         queue.enqueueReadBuffer(
@@ -274,7 +274,18 @@ public:
                 cpu_output.data());
     }
 
+    void setBounces(int bounces){
+        this->bounces = bounces;
+        //std::cout << "Bounces set to " << bounces << std::flush;
 
+    }
+    void setSamples(int samples){
+        this->samples = samples;
+        //std::cout << "Samples set to " << samples << std::flush;
+
+
+
+    }
 private:
 
     void pickPlatform(const cl::vector<Platform>& platforms){
@@ -332,6 +343,8 @@ private:
     inline int toInt(float x){ return int(std::clamp(x, 0.0f, 1.0f) * 255 + .5f); }
 
 
+
+
     std::vector<Plane> cpu_planes;
     std::vector<Sphere> cpu_spheres;
     std::vector<cl_float4> cpu_output;
@@ -347,8 +360,8 @@ private:
 
     const int image_width;
     const int image_height;
-    const int samples;	// number of samples per pixel
-    const int bounces;	// number of bounces per ray
+    int samples;	// number of samples per pixel
+    int bounces;	// number of bounces per ray
 
     std::size_t global_work_size;
     std::size_t local_work_size;

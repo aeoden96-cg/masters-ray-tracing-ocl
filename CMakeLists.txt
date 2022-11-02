@@ -19,3 +19,4 @@ find_package(GLEW REQUIRED)
 target_link_libraries(project GLEW::GLEW)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/opencl_kernel.cl ${CMAKE_CURRENT_BINARY_DIR}/opencl_kernel.cl COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/arial.ttf ${CMAKE_CURRENT_BINARY_DIR}/arial.ttf COPYONLY)
