@@ -87,6 +87,8 @@ int main(int argc, char** argv){
     rect.setPosition(10, 10);
 
 
+    int edge_index = 0;
+    std::vector <std::string> edges = { "up_left", "down_right" };
 
     while (window.isOpen())
     {
@@ -114,8 +116,13 @@ int main(int argc, char** argv){
                     ocl.setBounces(settings.max_depth);
                     texts["bounces"].setString("Bounces: " + std::to_string(settings.max_depth));
                 }
+                else if( event.key.code == sf::Keyboard::Space ){
+                    edge_index = (edge_index + 1) % 3;
+                    std::cout << "edge_index: " << edges[edge_index] << std::endl;
+                }
+
                 else if( event.key.code >= sf::Keyboard::A && event.key.code <= sf::Keyboard::Z ){
-                    ocl.animate(event.key.code);
+                    ocl.animate(event.key.code, edges[edge_index]);
                 }
 
 

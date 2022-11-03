@@ -46,49 +46,73 @@ public:
     void load2Gpu() {
         // Create buffers on the OpenCL device for the image and the scene
         cl_output = Buffer(context, CL_MEM_WRITE_ONLY, image_width * image_height * sizeof(cl_float3));
+
         cl_spheres = Buffer(context, CL_MEM_READ_ONLY, numSpheres * sizeof(Sphere));
-        queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0, numSpheres  * sizeof(Sphere), cpu_spheres.data());
         cl_planes = Buffer(context, CL_MEM_READ_ONLY, numPlanes * sizeof(Plane));
+        cl_camera = Buffer(context, CL_MEM_READ_ONLY, sizeof(cl_float3));
+
+
+        queue.enqueueWriteBuffer(cl_spheres, CL_TRUE, 0, numSpheres  * sizeof(Sphere), cpu_spheres.data());
         queue.enqueueWriteBuffer(cl_planes, CL_TRUE, 0, numPlanes * sizeof(Plane), cpu_planes.data());
+        queue.enqueueWriteBuffer(cl_camera, CL_TRUE, 0, sizeof(cl_float3), &camera_origin);
+
 
 
         // specify OpenCL kernel arguments
         kernel.setArg(0, cl_spheres);
         kernel.setArg(1, cl_planes);
-        kernel.setArg(2, image_width);
-        kernel.setArg(3, image_height);
-        kernel.setArg(4, numSpheres);
-        kernel.setArg(5, numPlanes);
-        kernel.setArg(6, samples);
-        kernel.setArg(7, bounces);
-        kernel.setArg(8, cl_output);
+        kernel.setArg(2, cl_camera);
+        kernel.setArg(3, image_width);
+        kernel.setArg(4, image_height);
+        kernel.setArg(5, numSpheres);
+        kernel.setArg(6, numPlanes);
+        kernel.setArg(7, samples);
+        kernel.setArg(8, bounces);
+        kernel.setArg(9, cl_output);
+
+//        kernel.setArg(0, cl_spheres);
+//        kernel.setArg(1, cl_planes);
+//        kernel.setArg(2, image_width);
+//        kernel.setArg(3, image_height);
+//        kernel.setArg(4, numSpheres);
+//        kernel.setArg(5, numPlanes);
+//        kernel.setArg(6, samples);
+//        kernel.setArg(7, bounces);
+//        kernel.setArg(8, cl_output);
     }
 
-    void animate(sf::Keyboard::Key key){
-        switch(key){
-            case sf::Keyboard::G:
-                cpu_planes[0].position.y += 0.1;
-                cpu_planes[0].position2.y += 0.1;
-                break;
-            case sf::Keyboard::B:
-                cpu_planes[0].position.y -= 0.1;
-                cpu_planes[0].position2.y -= 0.1;
-                break;
-            case sf::Keyboard::V:
-                cpu_planes[0].position.x -= 0.1;
-                cpu_planes[0].position2.x -= 0.1;
-                break;
-            case sf::Keyboard::N:
-                cpu_planes[0].position.x += 0.1;
-                cpu_planes[0].position2.x += 0.1;
-                break;
-            case sf::Keyboard::H:
-                //flip normal
-                cpu_planes[0].normal.x *= -1;
-            default:
-                std::cout << "Invalid key" << std::endl;
+    void animate(sf::Keyboard::Key key, std::string& edge){
 
+//        cl_float3 orientation = cpu_planes[0].normal;
+//
+//        cl_float3 translation = {0, 0, 0};
+//        translation.x = orientation.x * 0.1f;
+//        translation.y = orientation.y * 0.1f;
+//        translation.z = orientation.z * 0.1f;
+
+
+
+        if (key == sf::Keyboard::W) {
+            camera_origin.y += 0.1f;
         }
+        if (key == sf::Keyboard::A) {
+            camera_origin.x -= 0.1f;
+        }
+        if (key == sf::Keyboard::S) {
+            camera_origin.y -= 0.1f;
+        }
+        if (key == sf::Keyboard::D) {
+            camera_origin.x += 0.1f;
+        }
+        if (key == sf::Keyboard::Q) {
+            camera_origin.z -= 0.1f;
+        }
+        if (key == sf::Keyboard::E) {
+            camera_origin.z += 0.1f;
+        }
+
+
+
 
     }
 
@@ -208,69 +232,114 @@ public:
 
     }
 
+    void addPlane(cl_float3 up_left, cl_float2 size, cl_float3 color, cl_float3 normal, cl_float3 emission){
+        Plane plane;
+        plane.up_left = up_left;
+        plane.normal = normal;
+        plane.color = color;
+        plane.emission = emission;
+        if (normal.x != 0) {
+            plane.down_right.x = up_left.x;
+            plane.down_right.y = up_left.y + size.x;
+            plane.down_right.z = up_left.z + size.y;
+        }
+        else if (normal.y != 0) {
+            plane.down_right.x = up_left.x + size.x;
+            plane.down_right.y = up_left.y;
+            plane.down_right.z = up_left.z + size.y;
+        }
+        else if (normal.z != 0) {
+            plane.down_right.x = up_left.x + size.x;
+            plane.down_right.y = up_left.y + size.y;
+            plane.down_right.z = up_left.z;
+        }
+
+
+        numPlanes++;
+        cpu_planes.push_back(plane);
+
+
+    }
+
     void initScenePlanes(){
-        cpu_planes[0].position = {-0.35f, -0.0f, -0.3f};
-        cpu_planes[0].position2 = {0.30f, -0.0f, 0.3f};
-        cpu_planes[0].color = {0.25f, 0.25f, 0.75f};
-        cpu_planes[0].emission = {0, 0, 0};
-        cpu_planes[0].normal = {0, 1, 0};
+        cpu_planes.resize(0);
+
+        // right wall
+        addPlane(
+                {0.5f, -0.5f, -0.5f},
+                {2.0f, 2.0f},
+                {0.25f, 0.25f, 0.75f},
+                {1.0f, 0.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f});
+
+        // left wall
+        addPlane(
+                {-0.5f, -0.5f, -0.5f},
+                {2.0f, 2.0f},
+                {0.75f, 0.25f, 0.25f},
+                {1.0f, 0.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f});
+
+        // top wall
+        addPlane(
+                {-0.5f, 0.4f, -0.5f},
+                {1.0f, 1.0f},
+                {1, 1,1},
+                {0.0f, 1.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f});
+
+        // bottom wall
+        addPlane(
+                {-0.5f, -0.5f, -0.5f},
+                {1.0f, 1.0f},
+                {1, 1,1},
+                {0.0f, 1.0f, 0.0f},
+                {0.0f, 0.0f, 0.0f});
+//
+//        // back wall
+        addPlane(
+                {-0.5f, -0.5f, -0.5f},
+                {1.0f, 1.0f},
+                {1, 1,1},
+                {0.0f, 0.0f, 1.0f},
+                {0.0f, 0.0f, 0.0f});
+
+
+        // light
+        addPlane(
+                {-0.2f, 0.39f, -0.1f},
+                {0.5f, 0.5f},
+                {1, 1,1},
+                {0.0f, 1.0f, 0.0f},
+                {9.0f, 8.0f, 9.0f});
+
+
+
+
+
     }
 
     void initSceneSpheres(){
 
-        // left wall
-        cpu_spheres[0].radius	= 200.0f;
-        cpu_spheres[0].position = {-200.6f, 0.0f, 0.0f};
-        cpu_spheres[0].color    = {0.75f, 0.25f, 0.25f};
-        cpu_spheres[0].emission = {0.0f, 0.0f, 0.0f};
+        numSpheres += 2;
+        cpu_spheres.resize(numSpheres);
 
-        // right wall
-        cpu_spheres[1].radius	= 200.0f;
-        cpu_spheres[1].position = {200.6f, 0.0f, 0.0f};
-        cpu_spheres[1].color    = {0.25f, 0.25f, 0.75f};
-        cpu_spheres[1].emission = {0.0f, 0.0f, 0.0f};
-
-        // floor
-        cpu_spheres[2].radius	= 200.0f;
-        cpu_spheres[2].position = {0.0f, -200.4f, 0.0f};
-        cpu_spheres[2].color	= {0.9f, 0.8f, 0.7f};
-        cpu_spheres[2].emission = {0.0f, 0.0f, 0.0f};
-
-        // ceiling
-        cpu_spheres[3].radius	= 200.0f;
-        cpu_spheres[3].position = {0.0f, 200.4f, 0.0f};
-        cpu_spheres[3].color	= {0.9f, 0.8f, 0.7f};
-        cpu_spheres[3].emission = {0.0f, 0.0f, 0.0f};
-
-        // back wall
-        cpu_spheres[4].radius   = 200.0f;
-        cpu_spheres[4].position = {0.0f, 0.0f, -200.4f};
-        cpu_spheres[4].color    = {0.9f, 0.8f, 0.7f};
-        cpu_spheres[4].emission = {0.0f, 0.0f, 0.0f};
-
-        // front wall
-        cpu_spheres[5].radius   = 200.0f;
-        cpu_spheres[5].position = {0.0f, 0.0f, 202.0f};
-        cpu_spheres[5].color    = {0.9f, 0.8f, 0.7f};
-        cpu_spheres[5].emission = {0.0f, 0.0f, 0.0f};
 
         // left sphere
-        cpu_spheres[6].radius   = 0.16f;
-        cpu_spheres[6].position = {-0.25f, -0.24f, -0.1f};
-        cpu_spheres[6].color    = {0.9f, 0.8f, 0.7f};
-        cpu_spheres[6].emission = {0.0f, 0.0f, 0.0f};
+        cpu_spheres[0].radius   = 0.16f;
+        cpu_spheres[0].position = {-0.25f, -0.24f, -0.1f};
+        cpu_spheres[0].color    = {0.9f, 0.8f, 0.7f};
+        cpu_spheres[0].emission = {0.0f, 0.0f, 0.0f};
+        cpu_spheres[0].isTransparent = false;
 
         // right sphere
-        cpu_spheres[7].radius   = 0.16f;
-        cpu_spheres[7].position = {0.25f, -0.24f, 0.1f};
-        cpu_spheres[7].color    = {0.9f, 0.8f, 0.7f};
-        cpu_spheres[7].emission = {0.0f, 0.0f, 0.0f};
+        cpu_spheres[1].radius   = 0.16f;
+        cpu_spheres[1].position = {0.25f, -0.24f, 0.1f};
+        cpu_spheres[1].color    = {0.9f, 0.8f, 0.7f};
+        cpu_spheres[1].emission = {0.0f, 0.0f, 0.0f};
+        cpu_spheres[1].isTransparent = true;
 
-        // lightsource
-        cpu_spheres[8].radius   = 1.0f;
-        cpu_spheres[8].position = {0.0f, 1.36f, 0.0f};
-        cpu_spheres[8].color    = {0.0f, 0.0f, 0.0f};
-        cpu_spheres[8].emission = {9.0f, 8.0f, 6.0f};
+
 
     }
 
@@ -380,6 +449,8 @@ private:
     Buffer cl_output;
     Buffer cl_spheres;
     Buffer cl_planes;
+    Buffer cl_camera;
+    cl_float3 camera_origin = {0.0f, 0.0f, 2.0f};
 
     const int image_width;
     const int image_height;
@@ -389,8 +460,8 @@ private:
     std::size_t global_work_size;
     std::size_t local_work_size;
 
-    int numSpheres = 9;
-    int numPlanes = 1;
+    int numSpheres = 0;
+    int numPlanes = 0;
 
 };
 
